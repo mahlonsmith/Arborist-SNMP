@@ -43,8 +43,8 @@ spec = Gem::Specification.new do |s|
 	This library adds common SNMP support to Arborist monitors.
 	EOF
 	s.required_ruby_version = '>= 2'
-	# s.post_install_message = 'HuurrnnggghH!!!'
 
+	s.add_dependency 'arborist', "~> 1.0"
 	s.add_dependency 'snmp', "~> 1.2"
 end
 

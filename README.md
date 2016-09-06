@@ -39,13 +39,14 @@ In this example, we've created a resource node under an existing host, like so:
 	Arborist::Host( 'example' ) do
 		description "Example host"
 		address     '10.6.0.169'
-		resource 'load', description: 'machine load'
+		resource 'load', description: 'machine load' do
+			config load_error_at: 5
+		end
 	end
 
 
 From a monitor file, require this library, and create an snmp instance.
 You can reuse a single instance, or create individual ones per monitor.
-
 
 	require 'arborist/monitor/snmp'
 
@@ -59,7 +60,9 @@ You can reuse a single instance, or create individual ones per monitor.
 		exec( snmp )
 	end
 
-Please see the rdoc for all the mode types and error_at options.
+Please see the rdoc for all the mode types and error_at options.  Per
+node "config" vars override global defaults when instantiating the
+monitor.
 
 
 ## License

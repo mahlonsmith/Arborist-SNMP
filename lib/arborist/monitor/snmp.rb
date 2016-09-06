@@ -23,7 +23,7 @@ class Arborist::Monitor::SNMP
 	log_to :arborist
 
 	# The version of this library.
-	VERSION = '0.1.0'
+	VERSION = '0.2.0'
 
 	# "Modes" that this monitor understands.
 	VALID_MODES = %i[ disk load memory swap process ]
@@ -79,7 +79,7 @@ class Arborist::Monitor::SNMP
 	}
 
 
-	# Defaults for instances of this monitor
+	# Global defaults for instances of this monitor
 	#
 	DEFAULT_OPTIONS = {
 		timeout:          2,
@@ -87,6 +87,8 @@ class Arborist::Monitor::SNMP
 		community:        'public',
 		port:             161,
 		storage_error_at: 95,    # in percent full
+		storage_include:  [],    # if non-empty, only these paths are included in checks
+		storage_exclude:  [],    # paths to exclude from checks
 		load_error_at:    7,
 		swap_error_at:    25,    # in percent remaining
 		mem_error_at:     51200, # in kilobytes
@@ -107,9 +109,12 @@ class Arborist::Monitor::SNMP
 	###
 	def initialize( options=DEFAULT_OPTIONS )
 		options = DEFAULT_OPTIONS.merge( options || {} )
+		%i[ storage_include storage_exclude processes ].each do |opt|
+			options[ opt ] = Array( options[opt] )
+		end
 
 		options.each do |name, value|
-			self.public_send( "#{name}=", value )
+			self.public_send( "#{name.to_s}=", value )
 		end
 	end
 
@@ -138,6 +143,12 @@ class Arborist::Monitor::SNMP
 
 	# Set an error if mount points are above this percentage.
 	attr_accessor :storage_error_at
+
+	# Only check these specific mount points.
+	attr_accessor :storage_include
+
+	# Exclude these mount points (array of paths) from checks.
+	attr_accessor :storage_exclude
 
 	# Set an error if the 5 minute load average exceeds this.
 	attr_accessor :load_error_at
@@ -177,12 +188,14 @@ class Arborist::Monitor::SNMP
 			return {}
 		end
 
-		# Create mapping of addresses back to node identifiers.
+		# Create mapping of addresses back to node identifiers,
+		# and retain any custom configs per node.
 		#
-		@identifiers = nodes.each_with_object({}) do |(identifier, props), hash|
+		@identifiers = {}
+		nodes.each_pair do |(identifier, props)|
 			next unless props.key?( 'addresses' )
 			address = props[ 'addresses' ].first
-			hash[ address ] = identifier
+			self.identifiers[ address ] = [ identifier, props['config'] ]
 		end
 
 		# Perform the work!
@@ -191,12 +204,14 @@ class Arborist::Monitor::SNMP
 		self.identifiers.keys.each do |host|
 			thr = Thread.new do
 				Thread.current.abort_on_exception = true
+
+				config = self.identifiers[host].last || {}
 				opts = {
 					host:      host,
-					port:      self.port,
-					community: self.community,
-					timeout:   self.timeout,
-					retries:   self.retries
+					port:      config[ 'port' ] || self.port,
+					community: config[ 'community' ] || self.community,
+					timeout:   config[ 'timeout' ] || self.timeout,
+					retries:   config[ 'retries' ] || self.retries
 				}
 
 				begin
@@ -233,7 +248,7 @@ class Arborist::Monitor::SNMP
 		# Map everything back to identifier -> attribute(s), and send to the manager.
 		#
 		reply = self.results.each_with_object({}) do |(address, results), hash|
-			identifier = self.identifiers[ address ] or next
+			identifier = self.identifiers[ address ].first
 			hash[ identifier ] = results
 		end
 		self.log.debug "Sending to manager: %p" % [ reply ]
@@ -253,9 +268,11 @@ class Arborist::Monitor::SNMP
 		load5 = snmp.get( SNMP::ObjectId.new( LOAD[:five_min] ) ).varbind_list.first.value.to_f
 		self.log.debug "  Load on %s: %0.2f" % [ host, load5 ]
 
-		if load5 >= self.load_error_at
+		config = self.identifiers[ host ].last || {}
+		error_at = config[ 'load_error_at' ] || self.load_error_at
+		if load5 >= error_at
 			self.results[ host ] = {
-				error: "Load has exceeded %0.2f over a 5 minute average" % [ self.load_error_at ],
+				error: "Load has exceeded %0.2f over a 5 minute average" % [ error_at ],
 				load5: load5
 			}
 		else
@@ -272,9 +289,11 @@ class Arborist::Monitor::SNMP
 		mem_avail = snmp.get( SNMP::ObjectId.new( MEMORY[:mem_avail] ) ).varbind_list.first.value.to_f
 		self.log.debug "  Available memory on %s: %0.2f" % [ host, mem_avail ]
 
-		if mem_avail <= self.mem_error_at
+		config = self.identifiers[ host ].last || {}
+		error_at = config['mem_error_at'] || self.mem_error_at
+		if mem_avail <= error_at
 			self.results[ host ] = {
-				error: "Available memory is under %0.1fMB" % [ self.mem_error_at.to_f / 1024 ],
+				error: "Available memory is under %0.1fMB" % [ error_at.to_f / 1024 ],
 				available_memory: mem_avail
 			}
 		else
@@ -294,7 +313,8 @@ class Arborist::Monitor::SNMP
 		swap_used  = ( "%0.2f" % ((swap_avail / swap_total.to_f * 100 ) - 100).abs ).to_f
 		self.log.debug "  Swap in use on %s: %0.2f" % [ host, swap_used ]
 
-		if swap_used >= self.swap_error_at
+		config = self.identifiers[ host ].last || {}
+		if swap_used >= ( config['swap_error_at'] || self.swap_error_at )
 			self.results[ host ] = {
 				error: "%0.2f%% swap in use" % [ swap_used ],
 				swap_used: swap_used
@@ -313,10 +333,16 @@ class Arborist::Monitor::SNMP
 		errors  = []
 		results = {}
 		mounts  = self.get_disk_percentages( snmp )
+		config  = self.identifiers[ host ].last || {}
+
+		includes = config[ 'storage_include' ] || self.storage_include
+		excludes = config[ 'storage_exclude' ] || self.storage_exclude
 
 		mounts.each_pair do |path, percentage|
-			if percentage >= self.storage_error_at
-				errors << "Mount %s at %d%% capacity" % [ path, percentage ]
+			next if excludes.include?( path )
+			next if ! includes.empty? && ! includes.include?( path )
+			if percentage >= ( config[ 'storage_error_at' ] || self.storage_error_at )
+				errors << "%s at %d%% capacity" % [ path, percentage ]
 			end
 		end
 
@@ -332,7 +358,9 @@ class Arborist::Monitor::SNMP
 	###
 	def gather_processlist( snmp, host )
 		self.log.debug "Getting running process list for %s" % [ host ]
-		procs = []
+		config = self.identifiers[ host ].last || {}
+		procs  = []
+		errors = []
 
 		snmp.walk([ PROCESS[:list], PROCESS[:args] ]) do |list|
 			process = list[0].value.to_s
@@ -343,8 +371,7 @@ class Arborist::Monitor::SNMP
 		# Check against the running stuff, setting an error if
 		# one isn't found.
 		#
-		errors = []
-		Array( self.processes ).each do |process|
+		Array( config['processes'] || self.processes ).each do |process|
 			process_r = Regexp.new( process )
 			found = procs.find{|p| p.match(process_r) }
 			errors << "Process '%s' is not running" % [ process, host ] unless found
@@ -382,17 +409,18 @@ class Arborist::Monitor::SNMP
 		# Everything else.
 		#
 		snmp.walk( STORAGE_NET_SNMP ) do |list|
-			mount   = list[0].value.to_s
+			mount = list[0].value.to_s
 			next if mount == 'noSuchInstance'
 
 			next if list[2].value.to_s == 'noSuchInstance'
-			used    = list[2].value.to_i
+			used = list[2].value.to_i
 
-			typeoid = list[1].value.join('.').to_s
-			next if typeoid =~ STORAGE_IGNORE
+			unless list[1].value.to_s == 'noSuchInstance'
+				typeoid = list[1].value.join('.').to_s
+				next if typeoid =~ STORAGE_IGNORE
+			end
 			next if mount =~ /\/(?:dev|proc)$/
 
-			self.log.debug "   %s -> %s -> %s" % [ mount, typeoid, used ]
 			disks[ mount ] = used
 		end
 
