@@ -23,7 +23,7 @@ class Arborist::Monitor::SNMP
 	log_to :arborist
 
 	# The version of this library.
-	VERSION = '0.2.0'
+	VERSION = '0.2.1'
 
 	# "Modes" that this monitor understands.
 	VALID_MODES = %i[ disk load memory swap process ]
@@ -248,8 +248,8 @@ class Arborist::Monitor::SNMP
 		# Map everything back to identifier -> attribute(s), and send to the manager.
 		#
 		reply = self.results.each_with_object({}) do |(address, results), hash|
-			identifier = self.identifiers[ address ].first
-			hash[ identifier ] = results
+			identifier = self.identifiers[ address ] or next
+			hash[ identifier.first ] = results
 		end
 		self.log.debug "Sending to manager: %p" % [ reply ]
 		return reply
