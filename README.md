@@ -63,7 +63,7 @@ You can reuse a single instance, or create individual ones per monitor.
 
 	Arborist::Monitor 'mount capacity check' do
 		every 30.seconds
-		match type: 'resource', category: 'load'
+		match type: 'resource', category: 'disk'
 		include_down true
 		use :addresses, :config
 
