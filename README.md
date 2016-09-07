@@ -39,8 +39,9 @@ In this example, we've created a resource node under an existing host, like so:
 	Arborist::Host( 'example' ) do
 		description "Example host"
 		address     '10.6.0.169'
-		resource 'load', description: 'machine load' do
-			config load_error_at: 5
+		resource 'load', description: 'machine load'
+		resource 'disk' do
+			include: [ '/', '/mnt' ]
 		end
 	end
 
@@ -56,13 +57,24 @@ You can reuse a single instance, or create individual ones per monitor.
 		include_down true
 		use :addresses
 
-		snmp = Arborist::Monitor::SNMP.new( mode: 'load', load_error_at: 10 )
+		snmp = Arborist::Monitor::SNMP::Load( error_at: 10 )
 		exec( snmp )
 	end
+
+	Arborist::Monitor 'mount capacity check' do
+		every 30.seconds
+		match type: 'resource', category: 'load'
+		include_down true
+		use :addresses, :config
+
+		exec( Arborist::Monitor::SNMP::Disk )
+	end
+
 
 Please see the rdoc for all the mode types and error_at options.  Per
 node "config" vars override global defaults when instantiating the
 monitor.
+
 
 
 ## License
