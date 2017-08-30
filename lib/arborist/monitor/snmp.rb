@@ -23,7 +23,7 @@ module Arborist::Monitor::SNMP
 	log_to :arborist
 
 	# The version of this library.
-	VERSION = '0.3.0'
+	VERSION = '0.3.1'
 
 	# Global defaults for instances of this monitor
 	#
@@ -33,6 +33,14 @@ module Arborist::Monitor::SNMP
 		community: 'public',
 		port:      161
 	}
+
+	# Always request the node addresses and any config.
+	USED_PROPERTIES = [ :addresses, :config ].freeze
+
+	### Return the properties used by this monitor.
+	def self::node_properties
+		return USED_PROPERTIES
+	end
 
 
 	### Connect to the SNMP daemon and yield.

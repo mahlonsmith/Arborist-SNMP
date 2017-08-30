@@ -44,7 +44,7 @@ spec = Gem::Specification.new do |s|
 	EOF
 	s.required_ruby_version = '>= 2'
 
-	s.add_dependency 'arborist', "~> 1.0"
+	s.add_dependency 'arborist', "~> 0.1"
 	s.add_dependency 'snmp', "~> 1.2"
 end
 
