@@ -111,7 +111,6 @@ end
 __END__
 lib/arborist/snmp.rb
 lib/arborist/monitor/snmp.rb
-lib/arborist/monitor/snmp/swap.rb
 lib/arborist/monitor/snmp/disk.rb
 lib/arborist/monitor/snmp/process.rb
 lib/arborist/monitor/snmp/memory.rb
