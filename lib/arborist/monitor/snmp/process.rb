@@ -5,56 +5,60 @@ require 'arborist/monitor/snmp' unless defined?( Arborist::Monitor::SNMP )
 
 # SNMP running process checks.
 #
+# This only checks running userland processes.
+#
 class Arborist::Monitor::SNMP::Process
 	include Arborist::Monitor::SNMP
 
-	extend Loggability
-	log_to :arborist
+	extend Configurability, Loggability
+	log_to :arborist_snmp
+
 
 	# OIDS for discovering running processes.
+	# Of course, Windows does it slightly differently.
 	#
 	PROCESS = {
-		 list: '1.3.6.1.2.1.25.4.2.1.4',
-		 args: '1.3.6.1.2.1.25.4.2.1.5'
+		netsnmp: {
+			list: '1.3.6.1.2.1.25.4.2.1.4',
+			args: '1.3.6.1.2.1.25.4.2.1.5'
+		},
+		windows: {
+			list: '1.3.6.1.2.1.25.4.2.1.2',
+			path: '1.3.6.1.2.1.25.4.2.1.4',
+			args: '1.3.6.1.2.1.25.4.2.1.5'
+		}
 	}
+
 
 	# Global defaults for instances of this monitor
 	#
-	DEFAULT_OPTIONS = {
-		processes: [] # list of procs to match
-	}
+	configurability( 'arborist.snmp.processes' ) do
+		# Default list of processes to check for
+		setting :check, default: [] do |val|
+			Array( val )
+		end
+	end
 
 
-	### This monitor is complex enough to require creating an instance from the caller.
-	### Provide a friendlier error message the class was provided to exec() directly.
+	### Return the properties used by this monitor.
+	###
+	def self::node_properties
+		return USED_PROPERTIES
+	end
+
+
+	### Class #run creates a new instance and immediately runs it.
 	###
 	def self::run( nodes )
 		return new.run( nodes )
 	end
 
 
-	### Create a new instance of this monitor.
-	###
-	def initialize( options=DEFAULT_OPTIONS )
-		options = DEFAULT_OPTIONS.merge( options || {} )
-		%i[ processes ].each do |opt|
-			options[ opt ] = Array( options[opt] )
-		end
-
-		options.each do |name, value|
-			self.public_send( "#{name.to_s}=", value )
-		end
-	end
-
-	# Set an error if processes in this array aren't running.
-	attr_accessor :processes
-
-
 	### Perform the monitoring checks.
 	###
 	def run( nodes )
-		super do |snmp, host|
-			self.gather_processlist( snmp, host )
+		super do |host, snmp|
+			self.gather_processlist( host, snmp )
 		end
 	end
 
@@ -66,32 +70,52 @@ class Arborist::Monitor::SNMP::Process
 	### Collect running processes on +host+ from an existing (and open)
 	#### +snmp+ connection.
 	###
-	def gather_processlist( snmp, host )
-		self.log.debug "Getting running process list for %s" % [ host ]
-		config = @identifiers[ host ].last || {}
-		procs  = []
+	def gather_processlist( host, snmp )
+		config = self.identifiers[ host ].last || {}
 		errors = []
+		procs  = self.system =~ /windows\s+/i ? self.get_windows( snmp ) : self.get_procs( snmp )
 
-		snmp.walk([ PROCESS[:list], PROCESS[:args] ]) do |list|
-			process = list[0].value.to_s
-			args    = list[1].value.to_s
-			procs << "%s %s " % [ process, args ]
-		end
+		self.log.debug "Running processes for host: %s: %p" % [ host, procs ]
+		self.results[ host ] = { count: procs.size }
 
-		# Check against the running stuff, setting an error if
-		# one isn't found.
+		# Check against what is running.
 		#
-		Array( config['processes'] || self.processes ).each do |process|
+		Array( config['processes'] || self.class.check ).each do |process|
 			process_r = Regexp.new( process )
 			found = procs.find{|p| p.match(process_r) }
-			errors << "Process '%s' is not running" % [ process, host ] unless found
+			errors << "'%s' is not running" % [ process ] unless found
 		end
 
-		self.log.debug "  %d running processes" % [ procs.length ]
-		if errors.empty?
-			@results[ host ] = {}
-		else
-			@results[ host ] = { error: errors.join( ', ' ) }
+		self.results[ host ][ :error ] = errors.join( ', ' ) unless errors.empty?
+	end
+
+
+	### Parse OIDS and return an Array of running processes.
+	### Windows specific behaviors.
+	###
+	def get_windows( snmp )
+		oids = [ PROCESS[:windows][:path], PROCESS[:windows][:list], PROCESS[:windows][:args] ]
+		return snmp.walk( oids ).each_slice( 3 ). each_with_object( [] ) do |vals, acc|
+			path, process, args = vals[0][1], vals[1][1], vals[2][1]
+			next if path.empty?
+
+			process = "%s%s" % [ path, process ]
+			process << " %s" % [ args ] unless args.empty?
+			acc << process
+		end
+	end
+
+
+	### Parse OIDS and return an Array of running processes.
+	###
+	def get_procs( snmp )
+		oids = [ PROCESS[:netsnmp][:list], PROCESS[:netsnmp][:args] ]
+		return snmp.walk( oids ).each_slice( 2 ).each_with_object( [] ) do |vals, acc|
+			process, args = vals[0][1], vals[1][1]
+			next if process.empty?
+
+			process << " %s" % [ args ] unless args.empty?
+			acc << process
 		end
 	end
 

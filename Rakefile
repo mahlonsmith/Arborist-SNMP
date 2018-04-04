@@ -13,7 +13,7 @@ if Rake.application.options.trace
 end
 
 # parse the current library version
-$version = ( LIBDIR + 'arborist' + 'monitor' + "#{PROJECT}.rb" ).read.split(/\n/).
+$version = ( LIBDIR + 'arborist' + "#{PROJECT}.rb" ).read.split(/\n/).
 	select{|line| line =~ /VERSION =/}.first.match(/([\d|.]+)/)[1]
 
 task :default => [ :spec, :docs, :package ]
@@ -30,7 +30,7 @@ spec = Gem::Specification.new do |s|
 	s.homepage     = 'http://bitbucket.org/mahlon/Arborist-SNMP'
 	s.authors      = [ 'Mahlon E. Smith <mahlon@martini.nu>', 'Michael Granger <ged@faeriemud.org>' ]
 	s.platform     = Gem::Platform::RUBY
-	s.summary      = "Common SNMP support for Arborist"
+	s.summary      = "SNMP support for Arborist monitors"
 	s.name         = 'arborist-' + PROJECT
 	s.version      = $version
 	s.license      = 'BSD-3-Clause'
@@ -40,12 +40,12 @@ spec = Gem::Specification.new do |s|
 	s.files        = File.read( __FILE__ ).split( /^__END__/, 2 ).last.split
 	# s.executables  = %w[]
 	s.description  = <<-EOF
-	This library adds common SNMP support to Arborist monitors.
+	This library adds common SNMP resource support to Arborist monitors.
 	EOF
 	s.required_ruby_version = '>= 2'
 
 	s.add_dependency 'arborist', "~> 0.1"
-	s.add_dependency 'snmp', "~> 1.2"
+	s.add_dependency 'net-snmp2', "~> 0.3"
 end
 
 Gem::PackageTask.new( spec ) do |pkg|
@@ -109,9 +109,10 @@ end
 ### M A N I F E S T
 ########################################################################
 __END__
+lib/arborist/snmp.rb
 lib/arborist/monitor/snmp.rb
 lib/arborist/monitor/snmp/swap.rb
 lib/arborist/monitor/snmp/disk.rb
 lib/arborist/monitor/snmp/process.rb
 lib/arborist/monitor/snmp/memory.rb
-lib/arborist/monitor/snmp/load.rb
+lib/arborist/monitor/snmp/cpu.rb

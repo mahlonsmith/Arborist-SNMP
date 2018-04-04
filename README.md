@@ -1,4 +1,6 @@
-# Arborist-SNMP
+
+Arborist-SNMP
+=============
 
 home
 : http://bitbucket.org/mahlon/Arborist-SNMP
@@ -7,79 +9,234 @@ code
 : http://code.martini.nu/Arborist-SNMP
 
 
-## Description
+Description
+-----------
 
 Arborist is a monitoring toolkit that follows the UNIX philosophy
 of small parts and loose coupling for stability, reliability, and
 customizability.
 
-This adds SNMP support to Arborist's monitoring, for things such as:
+This adds various SNMP support to Arborist's monitoring, specifically
+for OIDS involving:
 
  - Disk space capacity
- - System load
- - Free memory
- - Swap in use
+ - System CPU utilization
+ - Memory and swap usage
  - Running process checks
 
-
-## Prerequisites
-
-* Ruby 2.2 or better
+It tries to provide sane defaults, while allowing fine grained settings
+per resource node.  Both Windows and UCD-SNMP systems are supported.
 
 
-## Installation
+Prerequisites
+-------------
+
+  * Ruby 2.3 or better
+  * Net-SNMP libraries
+
+
+Installation
+------------
 
     $ gem install arborist-snmp
 
 
-## Usage
+Configuration
+-------------
 
-In this example, we've created a resource node under an existing host, like so:
+Global configuration overrides can be added to the Arborist config file,
+under the `snmp` key.
 
-	Arborist::Host( 'example' ) do
-		description "Example host"
-		address     '10.6.0.169'
-		resource 'load', description: 'machine load'
-		resource 'disk' do
-			include: [ '/', '/mnt' ]
-		end
+The defaults are as follows:
+
+	arborist:
+	  snmp:
+		timeout: 2
+		retries: 1
+		community: public
+		version: 2c
+		port: 161
+		batchsize: 25
+		cpu:
+		  warn_at: 80
+		disk:
+		  warn_at: 90
+		  include: ~
+		  exclude:
+		  - "^/dev(/.+)?$"
+		  - "^/net(/.+)?$"
+		  - "^/proc$"
+		  - "^/run$"
+		  - "^/sys/"
+		memory:
+		  physical_warn_at: ~
+		  swap_warn_at: 60
+		processes:
+		  check: []
+
+
+The `warn_at` keys imply usage capacity as a percentage. ie:  "Warn me
+when a disk mount point is at 90 percent utilization."
+
+
+### Library Options
+
+  * **timeout**: How long to wait for an SNMP response, in seconds?
+  * **retries**: If an error occurs during SNMP communication, try again this many times before giving up.
+  * **community**: The SNMP community name for reading data.
+  * **version**: The SNMP protocol version.  1 and 2c are supported.
+  * **port**: The UDP port SNMP is listening on.
+  * **batchsize**: How many hosts to gather SNMP data on simultaneously.
+
+
+### Category Options and Behavior
+
+#### CPU
+
+  * **warn_at**: Set the node to a `warning` state when utilization is at or over this percentage.
+
+Utilization takes into account CPU core counts, and uses the 5 minute
+load average to calculate a percentage of current CPU use.
+
+2 properties are set on the node. `cpu` contains the detected CPU count
+and current utilization. `load` contains the 1, 5, and 15 minute load
+averages of the machine.
+
+
+#### Disk
+
+  * **warn_at**: Set the node to a `warning` state when disk capacity is at or over this amount.
+                 You can also set this to a Hash, keyed on mount name, if you want differing
+                 warning values per mount point.  A mount point that is at 100% capacity will
+                 be explicity set to `down`, as the resource it represents has been exhausted.
+  * **include**: String or Array of Strings.  If present, only matching mount points are
+                 considered while performing checks.  These are treated as regular expressions.
+  * **exclude**: String or Array of Strings.  If present, matching mount point are removed
+                 from evaluation.  These are treated as regular expressions.
+
+
+#### Memory
+
+  * **physical_warn_at**: Set the node to a `warning` state when RAM utilization is at or over this percentage.
+  * **swap_warn_at**: Set the node to a `warning` state when swap utilization is at or over this percentage.
+
+Warnings are only set for swap my default, since that is usually a
+better indication of an impending problem.
+
+
+#### Processes
+
+  * **check**: String or Array of Strings.  A list of processes to check if running.  These are
+               treated as regular expressions, and include process arguments.
+
+If any process in the list is not found in the process table, the
+resource is set to a `down` state.
+
+
+Examples
+--------
+
+In the simplest form, using default behaviors and settings, here's an
+example Monitor configuration:
+
+	require 'arborist/snmp'
+
+	Arborist::Monitor 'cpu load check', :cpu do
+		every 1.minute
+		match type: 'resource', category: 'cpu'
+		exec( Arborist::Monitor::SNMP::CPU )
 	end
 
-
-From a monitor file, require this library, and create an snmp instance.
-You can reuse a single instance, or create individual ones per monitor.
-
-	require 'arborist/monitor/snmp'
-
-	Arborist::Monitor '5 minute load average check' do
-		every 30.seconds
-		match type: 'resource', category: 'load'
-		include_down true
-		use :addresses
-
-		snmp = Arborist::Monitor::SNMP::Load( error_at: 10 )
-		exec( snmp )
-	end
-
-	Arborist::Monitor 'mount capacity check' do
-		every 30.seconds
+	Arborist::Monitor 'partition capacity', :disk do
+		every 1.minute
 		match type: 'resource', category: 'disk'
-		include_down true
-		use :addresses, :config
-
 		exec( Arborist::Monitor::SNMP::Disk )
 	end
 
+	Arborist::Monitor 'process checks', :proc do
+		every 1.minute
+		match type: 'resource', category: 'process'
+		exec( Arborist::Monitor::SNMP::Process )
+	end
 
-Please see the rdoc for all the mode types and error_at options.  Per
-node "config" vars override global defaults when instantiating the
-monitor.
+	Arborist::Monitor 'memory', :memory do
+		every 1.minute
+		match type: 'resource', category: 'memory'
+		exec( Arborist::Monitor::SNMP::Memory )
+	end
+
+
+Additionally, if you'd like these SNMP monitors to rely on the SNMP
+service itself, you can add a UDP check for that.
+
+	Arborist::Monitor 'udp service checks', :udp do
+		every 30.seconds
+		match type: 'service', protocol: 'udp'
+		exec( Arborist::Monitor::Socket::UDP )
+	end
+
+
+And a default node declaration:
+
+	Arborist::Host 'example' do
+		description 'An example host'
+		address 'demo.example.com'
+
+		resource 'cpu'
+		resource 'memory'
+		resource 'disk'
+	end
+
+
+
+All configuration can be overridden from the defaults using the `config`
+pragma, per node.  Here's a more elaborate example that performs the following:
+
+  * All SNMP monitored resources are quieted if the SNMP service itself is unavailable.
+  * Only monitor specific disk partitions, warning at different capacities .
+  * Ensure the 'important' processing is running with the '--production' flag.
+  * Warns at 95% memory utilization OR 10% swap.
+
+
+	Arborist::Host 'example' do
+		description 'An example host'
+		address 'demo.example.com'
+
+		service 'snmp', protocol: 'udp'
+
+		resource 'cpu', description: 'machine cpu load' do
+			depends_on 'example-snmp'
+		end
+
+		resource 'memory', description: 'machine ram and swap' do
+			depends_on 'example-snmp'
+			config physical_warn_at: 95, swap_warn_at: 10
+		end
+
+		resource 'disk', description: 'partition capacity' do
+			depends_on 'example-snmp'
+			config \
+				include: [
+					'^/tmp',
+					'^/var'
+				],
+				warn_at: {
+						'/tmp' => 50,
+						'/var' => 80
+				}
+		end
+
+		resource 'process' do
+			depends_on 'example-snmp'
+			config check: 'important --production'
+		end
+	end
 
 
 
 ## License
 
-Copyright (c) 2016, Michael Granger and Mahlon E. Smith
+Copyright (c) 2016-2018 Michael Granger and Mahlon E. Smith
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

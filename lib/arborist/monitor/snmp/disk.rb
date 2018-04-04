@@ -3,89 +3,89 @@
 
 require 'arborist/monitor/snmp' unless defined?( Arborist::Monitor::SNMP )
 
-# SNMP Disk capacity checks.
-# Returns all mounts with their current usage percentage in a "mount" attribute.
+# Disk capacity checks.
+#
+# Sets all configured mounts with their current usage percentage
+# in an attribute named "mounts".
 #
 class Arborist::Monitor::SNMP::Disk
 	include Arborist::Monitor::SNMP
 
-	extend Loggability
-	log_to :arborist
-
-	# The OID that returns the system environment.
-	IDENTIFICATION_OID = '1.3.6.1.2.1.1.1.0'
-
-	# For net-snmp systems, ignore mount types that match
-	# this regular expression.  This includes null/union mounts
-	# and NFS, currently.
-	STORAGE_IGNORE = %r{25.3.9.(?:2|14)$}
-
-	# The OID that matches a local windows hard disk.  Anything else
-	# is a remote (SMB) mount.
-	WINDOWS_DEVICE = '1.3.6.1.2.1.25.2.1.4'
+	extend Configurability, Loggability
+	log_to :arborist_snmp
 
 	# OIDS required to pull disk information from net-snmp.
 	#
-	STORAGE_NET_SNMP = [
-		'1.3.6.1.4.1.2021.9.1.2', # paths
-		'1.3.6.1.2.1.25.3.8.1.4', # types
-		'1.3.6.1.4.1.2021.9.1.9'  # percents
+	STORAGE_NET_SNMP = {
+		path: '1.3.6.1.4.1.2021.9.1.2',
+		percent: '1.3.6.1.4.1.2021.9.1.9',
+		type: '1.3.6.1.2.1.25.3.8.1.4'
+	}
+
+	# The OID that matches a local windows hard disk.
+	#
+	WINDOWS_DEVICES = [
+		'1.3.6.1.2.1.25.2.1.4', # local disk
+		'1.3.6.1.2.1.25.2.1.7'  # removables, but we have to include them for iscsi mounts
 	]
 
 	# OIDS required to pull disk information from Windows.
 	#
-	STORAGE_WINDOWS = [
-		'1.3.6.1.2.1.25.2.3.1.2', # types
-		'1.3.6.1.2.1.25.2.3.1.3', # paths
-		'1.3.6.1.2.1.25.2.3.1.5', # totalsize
-		'1.3.6.1.2.1.25.2.3.1.6'  # usedsize
-	]
-
-	# Global defaults for instances of this monitor
-	#
-	DEFAULT_OPTIONS = {
-		error_at: 95, # in percent full
-		include:  [], # if non-empty, only these paths are included in checks
-		exclude:  []  # paths to exclude from checks
+	STORAGE_WINDOWS = {
+		type: '1.3.6.1.2.1.25.2.3.1.2',
+		path: '1.3.6.1.2.1.25.2.3.1.3',
+		total: '1.3.6.1.2.1.25.2.3.1.5',
+		used: '1.3.6.1.2.1.25.2.3.1.6'
 	}
 
+	# The fallback warning capacity.
+	WARN_AT = 90
 
-	### This monitor is complex enough to require creating an instance from the caller.
-	### Provide a friendlier error message the class was provided to exec() directly.
+
+	# Configurability API
+	#
+	configurability( 'arborist.snmp.disk' ) do
+		# What percentage qualifies as a warning
+		setting :warn_at, default: WARN_AT
+
+		# If non-empty, only these paths are included in checks.
+		#
+		setting :include do |val|
+			if val
+				mounts = Array( val ).map{|m| Regexp.new(m) }
+				Regexp.union( mounts )
+			end
+		end
+
+		# Paths to exclude from checks
+		#
+		setting :exclude,
+			default: [ '^/dev(/.+)?$', '^/net(/.+)?$', '^/proc$', '^/run$', '^/sys/' ] do |val|
+			mounts = Array( val ).map{|m| Regexp.new(m) }
+			Regexp.union( mounts )
+		end
+	end
+
+
+	### Return the properties used by this monitor.
+	###
+	def self::node_properties
+		return USED_PROPERTIES
+	end
+
+
+	### Class #run creates a new instance and immediately runs it.
 	###
 	def self::run( nodes )
 		return new.run( nodes )
 	end
 
 
-	### Create a new instance of this monitor.
-	###
-	def initialize( options=DEFAULT_OPTIONS )
-		options = DEFAULT_OPTIONS.merge( options || {} )
-		%i[ include exclude ].each do |opt|
-			options[ opt ] = Array( options[opt] )
-		end
-
-		options.each do |name, value|
-			self.public_send( "#{name.to_s}=", value )
-		end
-	end
-
-	# Set an error if mount points are above this percentage.
-	attr_accessor :error_at
-
-	# Only check these specific mount points.
-	attr_accessor :include
-
-	# Exclude these mount points (array of paths) from checks.
-	attr_accessor :exclude
-
-
 	### Perform the monitoring checks.
 	###
 	def run( nodes )
-		super do |snmp, host|
-			self.gather_disks( snmp, host )
+		super do |host, snmp|
+			self.gather_disks( host, snmp )
 		end
 	end
 
@@ -95,72 +95,88 @@ class Arborist::Monitor::SNMP::Disk
 	#########
 
 	### Collect mount point usage for +host+ from an existing (and open)
-	#### +snmp+ connection.
+	### +snmp+ connection.
 	###
-	def gather_disks( snmp, host )
-		self.log.debug "Getting disk information for %s" % [ host ]
-		errors  = []
-		results = {}
-		mounts  = self.get_disk_percentages( snmp )
-		config  = @identifiers[ host ].last || {}
+	def gather_disks( host, snmp )
+		mounts  =  self.system =~ /windows\s+/i ? self.windows_disks( snmp ) : self.unix_disks( snmp )
+		config  = self.identifiers[ host ].last || {}
+		warn_at = config[ 'warn_at' ] || self.class.warn_at
 
-		includes = config[ 'include' ] || self.include
-		excludes = config[ 'exclude' ] || self.exclude
+		includes = self.format_mounts( config, 'include' ) || self.class.include
+		excludes = self.format_mounts( config, 'exclude' ) || self.class.exclude
 
+		mounts.reject! do |path, percentage|
+			excludes.match( path ) || ( includes && ! includes.match( path ) )
+		end
+
+		errors   = []
+		warnings = []
 		mounts.each_pair do |path, percentage|
-			next if excludes.include?( path )
-			next if ! includes.empty? && ! includes.include?( path )
-			if percentage >= ( config[ 'error_at' ] || self.error_at )
-				errors << "%s at %d%% capacity" % [ path, percentage ]
+
+			warn = begin
+			  if warn_at.is_a?( Hash )
+				  warn_at[ path ] || WARN_AT
+			  else
+				  warn_at
+			  end
+			end
+
+			self.log.debug "%s:%s -> at %d, warn at %d" % [ host, path, percentage, warn ]
+
+			if percentage >= warn.to_i
+				if percentage >= 100
+					errors << "%s at %d%% capacity" % [ path, percentage ]
+				else
+					warnings << "%s at %d%% capacity" % [ path, percentage ]
+				end
 			end
 		end
 
-		results[ :mounts ] = mounts
-		results[ :error ] = errors.join( ', ' ) unless errors.empty?
-
-		@results[ host ] = results
+		self.results[ host ] = { mounts: mounts }
+		self.results[ host ][ :error ]   = errors.join(', ')   unless errors.empty?
+		self.results[ host ][ :warning ] = warnings.join(', ') unless warnings.empty?
 	end
 
 
-	### Given a SNMP object, return a hash of:
+	### Return a single regexp for the 'include' or 'exclude' section of
+	### resource node's +config+, or nil if nonexistent.
 	###
-	###    device path => percentage full
-	###
-	def get_disk_percentages( snmp )
+	def format_mounts( config, section )
+		list = config[ section ] || return
+		mounts = Array( list ).map{|m| Regexp.new(m) }
+		return Regexp.union( mounts )
+	end
 
-		# Does this look like a windows system, or a net-snmp based one?
-		system_type = snmp.get( SNMP::ObjectId.new( IDENTIFICATION_OID ) ).varbind_list.first.value
+
+	### Fetch information for Windows systems.
+	###
+	def windows_disks( snmp )
+		raw = snmp.get_bulk([
+			STORAGE_WINDOWS[:path],
+			STORAGE_WINDOWS[:type],
+			STORAGE_WINDOWS[:total],
+			STORAGE_WINDOWS[:used]
+		]).varbinds.map( &:value )
+
 		disks = {}
-
-		# Windows has it's own MIBs.
-		#
-		if system_type =~ /windows/i
-			snmp.walk( STORAGE_WINDOWS ) do |list|
-				next unless list[0].value.to_s == WINDOWS_DEVICE
-				disks[ list[1].value.to_s ] = ( list[3].value.to_f / list[2].value.to_f ) * 100
-			end
-			return disks
-		end
-
-		# Everything else.
-		#
-		snmp.walk( STORAGE_NET_SNMP ) do |list|
-			mount = list[0].value.to_s
-			next if mount == 'noSuchInstance'
-
-			next if list[2].value.to_s == 'noSuchInstance'
-			used = list[2].value.to_i
-
-			unless list[1].value.to_s == 'noSuchInstance'
-				typeoid = list[1].value.join('.').to_s
-				next if typeoid =~ STORAGE_IGNORE
-			end
-			next if mount =~ /\/(?:dev|proc)$/
-
-			disks[ mount ] = used
+		raw.each_slice( 4 ) do |device|
+			next unless device[1].respond_to?( :oid ) && WINDOWS_DEVICES.include?( device[1].oid )
+			next if device[2].zero?
+			disks[ device[0] ] = (( device[3].to_f / device[2] ) * 100).round( 1 )
 		end
 
 		return disks
+	end
+
+
+	### Fetch information for Unix/MacOS systems.
+	###
+	def unix_disks( snmp )
+		raw = snmp.get_bulk([
+			STORAGE_NET_SNMP[:path],
+			STORAGE_NET_SNMP[:percent] ]).varbinds.map( &:value )
+
+		return Hash[ *raw ]
 	end
 
 end # class Arborist::Monitor::SNMP::Disk
