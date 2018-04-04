@@ -139,53 +139,54 @@ Examples
 In the simplest form, using default behaviors and settings, here's an
 example Monitor configuration:
 
-	require 'arborist/snmp'
-
-	Arborist::Monitor 'cpu load check', :cpu do
-		every 1.minute
-		match type: 'resource', category: 'cpu'
-		exec( Arborist::Monitor::SNMP::CPU )
-	end
-
-	Arborist::Monitor 'partition capacity', :disk do
-		every 1.minute
-		match type: 'resource', category: 'disk'
-		exec( Arborist::Monitor::SNMP::Disk )
-	end
-
-	Arborist::Monitor 'process checks', :proc do
-		every 1.minute
-		match type: 'resource', category: 'process'
-		exec( Arborist::Monitor::SNMP::Process )
-	end
-
-	Arborist::Monitor 'memory', :memory do
-		every 1.minute
-		match type: 'resource', category: 'memory'
-		exec( Arborist::Monitor::SNMP::Memory )
-	end
+    require 'arborist/snmp'
+    
+    Arborist::Monitor 'cpu load check', :cpu do
+        every 1.minute
+        match type: 'resource', category: 'cpu'
+        exec( Arborist::Monitor::SNMP::CPU )
+    end
+    
+    Arborist::Monitor 'partition capacity', :disk do
+        every 1.minute
+        match type: 'resource', category: 'disk'
+        exec( Arborist::Monitor::SNMP::Disk )
+    end
+    
+    Arborist::Monitor 'process checks', :proc do
+        every 1.minute
+        match type: 'resource', category: 'process'
+        exec( Arborist::Monitor::SNMP::Process )
+    end
+    
+    Arborist::Monitor 'memory', :memory do
+        every 1.minute
+        match type: 'resource', category: 'memory'
+        exec( Arborist::Monitor::SNMP::Memory )
+    end
 
 
 Additionally, if you'd like these SNMP monitors to rely on the SNMP
 service itself, you can add a UDP check for that.
 
-	Arborist::Monitor 'udp service checks', :udp do
-		every 30.seconds
-		match type: 'service', protocol: 'udp'
-		exec( Arborist::Monitor::Socket::UDP )
-	end
+    Arborist::Monitor 'udp service checks', :udp do
+        every 30.seconds
+        match type: 'service', protocol: 'udp'
+        exec( Arborist::Monitor::Socket::UDP )
+    end
 
 
 And a default node declaration:
 
-	Arborist::Host 'example' do
-		description 'An example host'
-		address 'demo.example.com'
 
-		resource 'cpu'
-		resource 'memory'
-		resource 'disk'
-	end
+    Arborist::Host 'example' do
+        description 'An example host'
+        address 'demo.example.com'
+    
+        resource 'cpu'
+        resource 'memory'
+        resource 'disk'
+    end
 
 
 
@@ -198,39 +199,39 @@ pragma, per node.  Here's a more elaborate example that performs the following:
   * Warns at 95% memory utilization OR 10% swap.
 
 
-	Arborist::Host 'example' do
-		description 'An example host'
-		address 'demo.example.com'
+    Arborist::Host 'example' do
+        description 'An example host'
+        address 'demo.example.com'
 
-		service 'snmp', protocol: 'udp'
-
-		resource 'cpu', description: 'machine cpu load' do
-			depends_on 'example-snmp'
-		end
-
-		resource 'memory', description: 'machine ram and swap' do
-			depends_on 'example-snmp'
-			config physical_warn_at: 95, swap_warn_at: 10
-		end
-
-		resource 'disk', description: 'partition capacity' do
-			depends_on 'example-snmp'
-			config \
-				include: [
-					'^/tmp',
-					'^/var'
-				],
-				warn_at: {
-						'/tmp' => 50,
-						'/var' => 80
-				}
-		end
-
-		resource 'process' do
-			depends_on 'example-snmp'
-			config check: 'important --production'
-		end
-	end
+        service 'snmp', protocol: 'udp'
+    
+        resource 'cpu', description: 'machine cpu load' do
+            depends_on 'example-snmp'
+        end
+    
+        resource 'memory', description: 'machine ram and swap' do
+            depends_on 'example-snmp'
+            config physical_warn_at: 95, swap_warn_at: 10
+        end
+    
+        resource 'disk', description: 'partition capacity' do
+            depends_on 'example-snmp'
+            config \
+                include: [
+                    '^/tmp',
+                    '^/var'
+                ],
+                warn_at: {
+                        '/tmp' => 50,
+                        '/var' => 80
+                }
+        end
+    
+        resource 'process' do
+            depends_on 'example-snmp'
+            config check: 'important --production'
+        end
+    end
 
 
 
