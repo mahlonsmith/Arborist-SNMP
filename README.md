@@ -49,31 +49,32 @@ under the `snmp` key.
 
 The defaults are as follows:
 
-	arborist:
-	  snmp:
-		timeout: 2
-		retries: 1
-		community: public
-		version: 2c
-		port: 161
-		batchsize: 25
-		cpu:
-		  warn_at: 80
-		disk:
-		  warn_at: 90
-		  include: ~
-		  exclude:
-		  - "^/dev(/.+)?$"
-		  - "^/net(/.+)?$"
-		  - "^/proc$"
-		  - "^/run$"
-		  - "^/sys/"
-		memory:
-		  physical_warn_at: ~
-		  swap_warn_at: 60
-		processes:
-		  check: []
-
+```
+arborist:
+  snmp:
+	timeout: 2
+	retries: 1
+	community: public
+	version: 2c
+	port: 161
+	batchsize: 25
+	cpu:
+	  warn_at: 80
+	disk:
+	  warn_at: 90
+	  include: ~
+	  exclude:
+	  - "^/dev(/.+)?$"
+	  - "^/net(/.+)?$"
+	  - "^/proc$"
+	  - "^/run$"
+	  - "^/sys/"
+	memory:
+	  physical_warn_at: ~
+	  swap_warn_at: 60
+	processes:
+	  check: []
+```
 
 The `warn_at` keys imply usage capacity as a percentage. ie:  "Warn me
 when a disk mount point is at 90 percent utilization."
@@ -120,7 +121,7 @@ averages of the machine.
   * **physical_warn_at**: Set the node to a `warning` state when RAM utilization is at or over this percentage.
   * **swap_warn_at**: Set the node to a `warning` state when swap utilization is at or over this percentage.
 
-Warnings are only set for swap my default, since that is usually a
+Warnings are only set for swap by default, since that is usually a
 better indication of an impending problem.
 
 
@@ -139,54 +140,58 @@ Examples
 In the simplest form, using default behaviors and settings, here's an
 example Monitor configuration:
 
-    require 'arborist/snmp'
-    
-    Arborist::Monitor 'cpu load check', :cpu do
-        every 1.minute
-        match type: 'resource', category: 'cpu'
-        exec( Arborist::Monitor::SNMP::CPU )
-    end
-    
-    Arborist::Monitor 'partition capacity', :disk do
-        every 1.minute
-        match type: 'resource', category: 'disk'
-        exec( Arborist::Monitor::SNMP::Disk )
-    end
-    
-    Arborist::Monitor 'process checks', :proc do
-        every 1.minute
-        match type: 'resource', category: 'process'
-        exec( Arborist::Monitor::SNMP::Process )
-    end
-    
-    Arborist::Monitor 'memory', :memory do
-        every 1.minute
-        match type: 'resource', category: 'memory'
-        exec( Arborist::Monitor::SNMP::Memory )
-    end
+```
+require 'arborist/snmp'
 
+Arborist::Monitor 'cpu load check', :cpu do
+	every 1.minute
+	match type: 'resource', category: 'cpu'
+	exec( Arborist::Monitor::SNMP::CPU )
+end
+
+Arborist::Monitor 'partition capacity', :disk do
+	every 1.minute
+	match type: 'resource', category: 'disk'
+	exec( Arborist::Monitor::SNMP::Disk )
+end
+
+Arborist::Monitor 'process checks', :proc do
+	every 1.minute
+	match type: 'resource', category: 'process'
+	exec( Arborist::Monitor::SNMP::Process )
+end
+
+Arborist::Monitor 'memory', :memory do
+	every 1.minute
+	match type: 'resource', category: 'memory'
+	exec( Arborist::Monitor::SNMP::Memory )
+end
+```
 
 Additionally, if you'd like these SNMP monitors to rely on the SNMP
 service itself, you can add a UDP check for that.
 
-    Arborist::Monitor 'udp service checks', :udp do
-        every 30.seconds
-        match type: 'service', protocol: 'udp'
-        exec( Arborist::Monitor::Socket::UDP )
-    end
+```
+Arborist::Monitor 'udp service checks', :udp do
+	every 30.seconds
+	match type: 'service', protocol: 'udp'
+	exec( Arborist::Monitor::Socket::UDP )
+end
+```
 
 
 And a default node declaration:
 
+```
+Arborist::Host 'example' do
+	description 'An example host'
+	address 'demo.example.com'
 
-    Arborist::Host 'example' do
-        description 'An example host'
-        address 'demo.example.com'
-    
-        resource 'cpu'
-        resource 'memory'
-        resource 'disk'
-    end
+	resource 'cpu'
+	resource 'memory'
+	resource 'disk'
+end
+```
 
 
 
@@ -200,40 +205,41 @@ pragma, per node.  Here's a more elaborate example that performs the following:
 
 -
 
-    Arborist::Host 'example' do
-        description 'An example host'
-        address 'demo.example.com'
+```
+Arborist::Host 'example' do
+	description 'An example host'
+	address 'demo.example.com'
 
-        service 'snmp', protocol: 'udp'
-    
-        resource 'cpu', description: 'machine cpu load' do
-            depends_on 'example-snmp'
-        end
-    
-        resource 'memory', description: 'machine ram and swap' do
-            depends_on 'example-snmp'
-            config physical_warn_at: 95, swap_warn_at: 10
-        end
-    
-        resource 'disk', description: 'partition capacity' do
-            depends_on 'example-snmp'
-            config \
-                include: [
-                    '^/tmp',
-                    '^/var'
-                ],
-                warn_at: {
-                        '/tmp' => 50,
-                        '/var' => 80
-                }
-        end
-    
-        resource 'process' do
-            depends_on 'example-snmp'
-            config check: 'important --production'
-        end
-    end
+	service 'snmp', protocol: 'udp'
 
+	resource 'cpu', description: 'machine cpu load' do
+		depends_on 'example-snmp'
+	end
+
+	resource 'memory', description: 'machine ram and swap' do
+		depends_on 'example-snmp'
+		config physical_warn_at: 95, swap_warn_at: 10
+	end
+
+	resource 'disk', description: 'partition capacity' do
+		depends_on 'example-snmp'
+		config \
+			include: [
+				'^/tmp',
+				'^/var'
+			],
+			warn_at: {
+					'/tmp' => 50,
+					'/var' => 80
+			}
+	end
+
+	resource 'process' do
+		depends_on 'example-snmp'
+		config check: 'important --production'
+	end
+end
+```
 
 
 ## License
