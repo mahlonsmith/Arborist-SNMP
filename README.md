@@ -198,6 +198,7 @@ pragma, per node.  Here's a more elaborate example that performs the following:
   * Ensure the 'important' processing is running with the '--production' flag.
   * Warns at 95% memory utilization OR 10% swap.
 
+-
 
     Arborist::Host 'example' do
         description 'An example host'
