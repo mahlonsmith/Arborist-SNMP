@@ -114,6 +114,9 @@ averages of the machine.
   * **exclude**: String or Array of Strings.  If present, matching mount point are removed
                  from evaluation.  These are treated as regular expressions.
 
+A single property "mounts" is set on the node, which is a hash keyed by
+mountpoint, with current capacity values.
+
 
 #### Memory
 
@@ -123,6 +126,9 @@ averages of the machine.
 Warnings are only set for swap by default, since that is usually a
 better indication of an impending problem.
 
+2 properties are set on the node, "memory" and "swap".  Each is a Hash
+that contains current usage and remaining available.
+
 
 #### Processes
 
@@ -131,6 +137,9 @@ better indication of an impending problem.
 
 If any process in the list is not found in the process table, the
 resource is set to a `down` state.
+
+A single property is set on the node, a "counts" key that contains the
+current number of running processes.
 
 
 Examples
