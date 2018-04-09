@@ -3,7 +3,7 @@
 #encoding: utf-8
 
 require 'arborist/monitor' unless defined?( Arborist::Monitor )
-require 'net-snmp2'
+require 'netsnmp'
 
 # SNMP checks for Arborist.  Requires an SNMP agent to be installed
 # on target machine, and the various "pieces" enabled for your platform.
@@ -37,13 +37,6 @@ module Arborist::Monitor::SNMP
 		# How many hosts to check simultaneously
 		setting :batchsize, default: 25
 	end
-
-	# Indicate to FFI that we're using threads.
-	Net::SNMP.thread_safe = true
-
-
-	# The system type, as advertised.
-	attr_reader :system
 
 	# The mapping of addresses back to node identifiers.
 	attr_reader :identifiers
@@ -86,7 +79,7 @@ module Arborist::Monitor::SNMP
 				thr = Thread.new do
 					config = self.identifiers[ host ].last || {}
 					opts = {
-						peername:  host,
+						host:      host,
 						port:      config[ 'port' ]      || Arborist::Monitor::SNMP.port,
 						version:   config[ 'version' ]   || Arborist::Monitor::SNMP.version,
 						community: config[ 'community' ] || Arborist::Monitor::SNMP.community,
@@ -94,22 +87,17 @@ module Arborist::Monitor::SNMP
 						retries:   config[ 'retries' ]   || Arborist::Monitor::SNMP.retries
 					}
 
-					snmp = Net::SNMP::Session.open( opts )
 					begin
-						@system = snmp.get( IDENTIFICATION_OID ).varbinds.first.value
-						yield( host, snmp )
+						NETSNMP::Client.new( opts ) do |snmp|
+							Thread.current[ :system ] = snmp.get( oid: IDENTIFICATION_OID )
+							yield( host, snmp )
+						end
 
-					rescue Net::SNMP::TimeoutError, Net::SNMP::Error => err
-						self.log.error "%s: %s %s" % [ host, err.message, snmp.error_message ]
-						self.results[ host ] = {
-							error: "%s" % [ snmp.error_message ]
-						}
 					rescue => err
+						self.log.error "%s: %s\n%s" % [ host, err.message, err.backtrace.join("\n  ") ]
 						self.results[ host ] = {
-							error: "Uncaught exception. (%s: %s)" % [ err.class.name, err.message ]
+							error: "Exception (%s: %s)" % [ err.class.name, err.message ]
 						}
-					ensure
-						snmp.close
 					end
 				end
 
@@ -133,6 +121,12 @@ module Arborist::Monitor::SNMP
 	ensure
 		@identifiers = {}
 		@results     = {}
+	end
+
+
+	### Return the current SNMP connection system string.
+	def system
+		return Thread.current[ :system ]
 	end
 
 end # Arborist::Monitor::SNMP

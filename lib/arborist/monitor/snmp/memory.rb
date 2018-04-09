@@ -131,7 +131,7 @@ class Arborist::Monitor::SNMP::Memory
 		info  = { memory: {}, swap: {} }
 		mem_idx, swap_idx = nil
 
-		snmp.walk( MEMORY[:windows][:label] ).each_with_index do |(_, val), i|
+		snmp.walk( oid: MEMORY[:windows][:label] ).each_with_index do |(_, val), i|
 			mem_idx  = i + 1 if val =~ /physical memory/i
 			swap_idx = i + 1 if val =~ /virtual memory/i
 		end
@@ -148,8 +148,8 @@ class Arborist::Monitor::SNMP::Memory
 	###
 	def calc_memory( snmp, oids )
 		info = { usage: 0, available: 0 }
-		avail = snmp.get( oids[:avail] ).varbinds.first.value.to_f
-		total = snmp.get( oids[:total] ).varbinds.first.value.to_f
+		avail = snmp.get( oid: oids[:avail] ).to_f
+		total = snmp.get( oid: oids[:total] ).to_f
 		used  = total - avail
 
 		return info if avail.zero?
@@ -166,9 +166,9 @@ class Arborist::Monitor::SNMP::Memory
 		info = { usage: 0, available: 0 }
 		return info unless idx
 
-		units = snmp.get( MEMORY[:windows][:units] + ".#{idx}" ).varbinds.first.value
-		total = snmp.get( MEMORY[:windows][:total] + ".#{idx}" ).varbinds.first.value.to_f * units
-		used  = snmp.get( MEMORY[:windows][:used] + ".#{idx}" ).varbinds.first.value.to_f * units
+		units = snmp.get( oid: MEMORY[:windows][:units] + ".#{idx}" )
+		total = snmp.get( oid: MEMORY[:windows][:total] + ".#{idx}" ).to_f * units
+		used  = snmp.get( oid: MEMORY[:windows][:used] + ".#{idx}" ).to_f * units
 
 		info[ :usage ]     = (( used / total ) * 100 ).round( 2 )
 		info[ :available ] = (( total - used ) / 1024 / 1024 ).round( 2 )

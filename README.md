@@ -32,7 +32,6 @@ Prerequisites
 -------------
 
   * Ruby 2.3 or better
-  * Net-SNMP libraries
 
 
 Installation
@@ -85,7 +84,7 @@ when a disk mount point is at 90 percent utilization."
   * **timeout**: How long to wait for an SNMP response, in seconds?
   * **retries**: If an error occurs during SNMP communication, try again this many times before giving up.
   * **community**: The SNMP community name for reading data.
-  * **version**: The SNMP protocol version.  1 and 2c are supported.
+  * **version**: The SNMP protocol version.  v1, v2c, and v3 are supported.
   * **port**: The UDP port SNMP is listening on.
   * **batchsize**: How many hosts to gather SNMP data on simultaneously.
 

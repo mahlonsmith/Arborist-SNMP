@@ -106,6 +106,7 @@ class Arborist::Monitor::SNMP::Disk
 		excludes = self.format_mounts( config, 'exclude' ) || self.class.exclude
 
 		mounts.reject! do |path, percentage|
+			path = path.to_s
 			excludes.match( path ) || ( includes && ! includes.match( path ) )
 		end
 
@@ -151,18 +152,32 @@ class Arborist::Monitor::SNMP::Disk
 	### Fetch information for Windows systems.
 	###
 	def windows_disks( snmp )
-		raw = snmp.get_bulk([
+		oids = [
 			STORAGE_WINDOWS[:path],
 			STORAGE_WINDOWS[:type],
 			STORAGE_WINDOWS[:total],
 			STORAGE_WINDOWS[:used]
-		]).varbinds.map( &:value )
+		]
+
+		paths = snmp.walk( oid: oids[0] ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
+		end
+		types = snmp.walk( oid: oids[1] ).each_with_object( [] ) do |(_, value), acc|
+			acc << WINDOWS_DEVICES.include?( value )
+		end
+		totals = snmp.walk( oid: oids[2] ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
+		end
+		used = snmp.walk( oid: oids[3] ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
+		end
 
 		disks = {}
-		raw.each_slice( 4 ) do |device|
-			next unless device[1].respond_to?( :oid ) && WINDOWS_DEVICES.include?( device[1].oid )
-			next if device[2].zero?
-			disks[ device[0] ] = (( device[3].to_f / device[2] ) * 100).round( 1 )
+		paths.each_with_index do |path, idx|
+			next if totals[ idx ].zero?
+			next unless types[ idx ]
+			disks[ path ] ||= {}
+			disks[ path ] = (( used[idx].to_f / totals[idx] ) * 100).round( 1 )
 		end
 
 		return disks
@@ -172,11 +187,16 @@ class Arborist::Monitor::SNMP::Disk
 	### Fetch information for Unix/MacOS systems.
 	###
 	def unix_disks( snmp )
-		raw = snmp.get_bulk([
-			STORAGE_NET_SNMP[:path],
-			STORAGE_NET_SNMP[:percent] ]).varbinds.map( &:value )
+		oids = [ STORAGE_NET_SNMP[:path], STORAGE_NET_SNMP[:percent] ]
+		paths = snmp.walk( oid: oids.first ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
+		end
+		capacities = snmp.walk( oid: oids.last ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
+		end
 
-		return Hash[ *raw ]
+		pairs = paths.zip( capacities )
+		return Hash[ *pairs.flatten ]
 	end
 
 end # class Arborist::Monitor::SNMP::Disk

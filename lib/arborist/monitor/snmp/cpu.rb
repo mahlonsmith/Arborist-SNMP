@@ -66,18 +66,13 @@ class Arborist::Monitor::SNMP::CPU
 	protected
 	#########
 
-	### Return system CPU data.
-	###
-	def cpu( snmp )
-		return snmp.walk( OIDS[:cpu] )
-	end
-
-
 	### Find load data, add additional niceties for reporting.
 	###
 	def format_load( snmp )
 		info = { cpu: {}, load: {} }
-		cpus = self.cpu( snmp )
+		cpus = snmp.walk( oid: OIDS[:cpu] ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
+		end
 
 		info[ :cpu ][ :count ] = cpus.size
 
@@ -91,20 +86,21 @@ class Arborist::Monitor::SNMP::CPU
 		# alert after X events" pragmas.
 		#
 		if self.system =~ /windows\s+/i
-			info[ :cpu ][ :usage ] = cpus.values.inject( :+ ).to_f / cpus.size
+			info[ :cpu ][ :usage ] = cpus.inject( :+ ).to_f / cpus.size
 			info[ :message ] = "System is %0.1f%% in use." % [ info[ :cpu ][ :usage ] ]
+
 
 		# UCDavis stuff is better for alerting only after there has been
 		# an extended load event.  Use the 5 minute average to avoid
 		# state changes on transient spikes.
 		#
 		else
-			snmp.walk( OIDS[:load] ).each_with_index do |(_, value), idx|
+			snmp.walk( oid: OIDS[:load] ).each_with_index do |(_, value), idx|
 				next unless LOADKEYS[ idx + 1 ]
 				info[ :load ][ LOADKEYS[idx + 1] ] = value.to_f
 			end
 
-			percentage = (( ( info[:load][ :load5 ] / cpus.size ) - 1 ) * 100 ).round( 1 )
+			percentage = (( ( info[:load][ :load5 ] / cpus.size) - 1 ) * 100 ).round( 1 )
 
 			if percentage < 0
 				info[ :message ] = "System is %0.1f%% idle." % [ percentage.abs ]

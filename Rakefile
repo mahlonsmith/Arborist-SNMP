@@ -45,7 +45,8 @@ spec = Gem::Specification.new do |s|
 	s.required_ruby_version = '>= 2'
 
 	s.add_dependency 'arborist', "~> 0.1"
-	s.add_dependency 'net-snmp2', "~> 0.3"
+	s.add_dependency 'netsnmp', "~> 0.1"
+	s.add_dependency 'xorcist', "~> 1.1"
 end
 
 Gem::PackageTask.new( spec ) do |pkg|

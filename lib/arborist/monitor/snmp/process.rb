@@ -95,14 +95,24 @@ class Arborist::Monitor::SNMP::Process
 	###
 	def get_windows( snmp )
 		oids = [ PROCESS[:windows][:path], PROCESS[:windows][:list], PROCESS[:windows][:args] ]
-		return snmp.walk( oids ).each_slice( 3 ). each_with_object( [] ) do |vals, acc|
-			path, process, args = vals[0][1], vals[1][1], vals[2][1]
-			next if path.empty?
 
-			process = "%s%s" % [ path, process ]
-			process << " %s" % [ args ] unless args.empty?
-			acc << process
+		paths = snmp.walk( oid: oids[0] ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
 		end
+		procs = snmp.walk( oid: oids[1] ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
+		end
+		args = snmp.walk( oid: oids[2] ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
+		end
+
+		return paths.zip( procs, args ).collect do |(path, process, arg)|
+			next unless path && process
+			next if path.empty?
+			path << process unless process.empty?
+			path << " %s" % [ arg.to_s ] if arg && ! arg.empty?
+			path
+		end.compact
 	end
 
 
@@ -110,13 +120,19 @@ class Arborist::Monitor::SNMP::Process
 	###
 	def get_procs( snmp )
 		oids = [ PROCESS[:netsnmp][:list], PROCESS[:netsnmp][:args] ]
-		return snmp.walk( oids ).each_slice( 2 ).each_with_object( [] ) do |vals, acc|
-			process, args = vals[0][1], vals[1][1]
-			next if process.empty?
 
-			process << " %s" % [ args ] unless args.empty?
-			acc << process
+		procs = snmp.walk( oid: oids.first ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
 		end
+		args = snmp.walk( oid: oids.last ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
+		end
+
+		return procs.zip( args ).collect do |(process, arg)|
+			next if process.empty?
+			process << " %s" % [ arg.to_s ] unless arg.empty?
+			process
+		end.compact
 	end
 
 end # class Arborist::Monitor::SNMP::Process
