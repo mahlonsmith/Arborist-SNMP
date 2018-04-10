@@ -80,7 +80,7 @@ class Arborist::Monitor::SNMP::Process
 
 		# Check against what is running.
 		#
-		Array( config['processes'] || self.class.check ).each do |process|
+		Array( config['check'] || self.class.check ).each do |process|
 			process_r = Regexp.new( process )
 			found = procs.find{|p| p.match(process_r) }
 			errors << "'%s' is not running" % [ process ] unless found
