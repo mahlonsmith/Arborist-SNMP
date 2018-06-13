@@ -51,28 +51,30 @@ The defaults are as follows:
 ```
 arborist:
   snmp:
-	timeout: 2
-	retries: 1
-	community: public
-	version: 2c
-	port: 161
-	batchsize: 25
-	cpu:
-	  warn_at: 80
-	disk:
-	  warn_at: 90
-	  include: ~
-	  exclude:
-	  - "^/dev(/.+)?$"
-	  - "^/net(/.+)?$"
-	  - "^/proc$"
-	  - "^/run$"
-	  - "^/sys/"
-	memory:
-	  physical_warn_at: ~
-	  swap_warn_at: 60
-	processes:
-	  check: []
+    timeout: 2
+    retries: 1
+    community: public
+    version: 2c
+    port: 161
+    batchsize: 25
+    cpu:
+      warn_at: 80
+    disk:
+      warn_at: 90
+      include: 
+      exclude:
+      - "^/dev(/.+)?$"
+      - "/dev$"
+      - "^/net(/.+)?$"
+      - "/proc$"
+      - "^/run$"
+      - "^/sys/"
+      - "/sys$"
+    processes:
+      check: []
+    memory:
+      physical_warn_at: 
+      swap_warn_at: 60
 ```
 
 The `warn_at` keys imply usage capacity as a percentage. ie:  "Warn me

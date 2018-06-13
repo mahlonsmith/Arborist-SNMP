@@ -60,7 +60,7 @@ class Arborist::Monitor::SNMP::Disk
 		# Paths to exclude from checks
 		#
 		setting :exclude,
-			default: [ '^/dev(/.+)?$', '^/net(/.+)?$', '^/proc$', '^/run$', '^/sys/' ] do |val|
+			default: [ '^/dev(/.+)?$', '/dev$', '^/net(/.+)?$', '/proc$', '^/run$', '^/sys/', '/sys$' ] do |val|
 			mounts = Array( val ).map{|m| Regexp.new(m) }
 			Regexp.union( mounts )
 		end
@@ -114,12 +114,10 @@ class Arborist::Monitor::SNMP::Disk
 		warnings = []
 		mounts.each_pair do |path, percentage|
 
-			warn = begin
-			  if warn_at.is_a?( Hash )
-				  warn_at[ path ] || WARN_AT
-			  else
-				  warn_at
-			  end
+			warn = if warn_at.is_a?( Hash )
+				warn_at[ path ] || WARN_AT
+			else
+				warn_at
 			end
 
 			self.log.debug "%s:%s -> at %d, warn at %d" % [ host, path, percentage, warn ]
