@@ -24,11 +24,7 @@ class Arborist::Monitor::SNMP::CPU
 	# When walking load OIDS, the iterator count matches
 	# these labels.
 	#
-	LOADKEYS = {
-		1 => :load1,
-		2 => :load5,
-		3 => :load15
-	}
+	LOADKEYS = %i[ load1 load5 load15 ]
 
 
 	# Global defaults for instances of this monitor
@@ -96,8 +92,8 @@ class Arborist::Monitor::SNMP::CPU
 		#
 		else
 			snmp.walk( oid: OIDS[:load] ).each_with_index do |(_, value), idx|
-				next unless LOADKEYS[ idx + 1 ]
-				info[ :load ][ LOADKEYS[idx + 1] ] = value.to_f
+				next unless LOADKEYS[ idx ]
+				info[ :load ][ LOADKEYS[idx] ] = value.to_f
 			end
 
 			percentage = (( ( info[:load][ :load5 ] / cpus.size) - 1 ) * 100 ).round( 1 )
