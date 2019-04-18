@@ -86,11 +86,11 @@ class Arborist::Monitor::SNMP::UPS::Battery
 
 		# don't report voltage if the UPS doesn't
 		voltage = snmp.get( oid: OIDS[:battery_voltage] ) rescue nil
-		info[ :voltage ] = voltage / 10 unless voltage.nil?
+		info[ :voltage ] = voltage / 10 if voltage
 
 		# don't report current if the UPS doesn't
 		current = snmp.get( oid: OIDS[:battery_current] ) rescue nil
-		info[ :current ] = current/10 unless current.nil?
+		info[ :current ] = current/10 if current
 
 		# see if we are on battery
 		info[ :seconds_on_battery ] = snmp.get( oid: OIDS[:seconds_on_battery] ) rescue 0
