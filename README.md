@@ -23,6 +23,7 @@ for OIDS involving:
  - System CPU utilization
  - Memory and swap usage
  - Running process checks
+ - UPS battery checks
 
 It tries to provide sane defaults, while allowing fine grained settings
 per resource node.  Both Windows and UCD-SNMP systems are supported.
@@ -75,6 +76,10 @@ arborist:
     memory:
       physical_warn_at: 
       swap_warn_at: 60
+    ups:
+      battery:
+        capacity_warn_at: 60
+        temperature_warn_at: 50
 ```
 
 The `warn_at` keys imply usage capacity as a percentage. ie:  "Warn me
@@ -143,6 +148,20 @@ resource is set to a `down` state.
 A single property is set on the node, a "counts" key that contains the
 current number of running processes.
 
+
+#### UPS
+
+##### Battery
+
+  * **capacity_warn_at**: Set the node to a `warning` state when the battery capacity is at or below this percentage.
+  * **temperature_warn_at**: Set the node to a `warning` state when the battery temperature is at or above this
+                             temperature (in Celcius).
+
+This check warns when the UPS is on battery, and reports the UPS' own
+estimated time remaining.
+
+A warning state will also be triggered based on battery status - low,
+depleted, or unknown.
 
 Examples
 --------
@@ -254,7 +273,7 @@ end
 
 ## License
 
-Copyright (c) 2016-2018 Michael Granger and Mahlon E. Smith
+Copyright (c) 2016-2019 Michael Granger and Mahlon E. Smith
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

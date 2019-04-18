@@ -135,4 +135,6 @@ require 'arborist/monitor/snmp/cpu'
 require 'arborist/monitor/snmp/disk'
 require 'arborist/monitor/snmp/process'
 require 'arborist/monitor/snmp/memory'
+require 'arborist/monitor/snmp/ups'
+require 'arborist/monitor/snmp/ups/battery'
 

@@ -116,3 +116,5 @@ lib/arborist/monitor/snmp/disk.rb
 lib/arborist/monitor/snmp/process.rb
 lib/arborist/monitor/snmp/memory.rb
 lib/arborist/monitor/snmp/cpu.rb
+lib/arborist/monitor/snmp/ups.rb
+lib/arborist/monitor/snmp/ups/battery.rb
