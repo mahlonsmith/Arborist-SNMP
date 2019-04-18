@@ -80,9 +80,9 @@ class Arborist::Monitor::SNMP::UPS::Battery
 
 		# basic info that's always available
 		info[ :status ] = snmp.get( oid: OIDS[:battery_status] )
-		info[ :capacity ] = snmp.get( oid: OIDS[:est_charge_remaining] )
-		info[ :temperature ] = snmp.get( oid: OIDS[:battery_temperature] )
-		info[ :minutes_remaining ]  = snmp.get( oid: OIDS[:est_minutes_remaining] )
+		info[ :capacity ] = snmp.get( oid: OIDS[:est_charge_remaining] ) rescue nil
+		info[ :temperature ] = snmp.get( oid: OIDS[:battery_temperature] ) rescue nil
+		info[ :minutes_remaining ]  = snmp.get( oid: OIDS[:est_minutes_remaining] ) rescue nil
 
 		# don't report voltage if the UPS doesn't
 		voltage = snmp.get( oid: OIDS[:battery_voltage] ) rescue nil
@@ -96,7 +96,7 @@ class Arborist::Monitor::SNMP::UPS::Battery
 		info[ :seconds_on_battery ] = snmp.get( oid: OIDS[:seconds_on_battery] ) rescue 0
 		info[ :in_use ] = ( info[ :seconds_on_battery ] != 0 )
 
-		return { battery: info }
+		return { battery: info.compact }
 	end
 
 	### Parse SNMP-provided information and alert based on thresholds.
@@ -115,17 +115,17 @@ class Arborist::Monitor::SNMP::UPS::Battery
 		warnings	= []
 
 		if in_use
-			mins = info.dig( :battery, :minutes_remaining )
+			mins = info.dig( :battery, :minutes_remaining ) || "(unknown)"
 			warnings << "UPS on battery - %s minute(s) remaning." % [ mins ]
 		end
 
 		warnings << BATTERY_STATUS[ status ] if status != 2
 
 		warnings << "Battery remaining capacity %0.1f%% less than %0.1f percent" %
-			[ capacity, cap_warn ] if capacity <= cap_warn
+			[ capacity, cap_warn ] if capacity && capacity <= cap_warn
 
 		warnings << "Battery temperature %dC greater than %dC" %
-			[ temperature, temp_warn ] if temperature >= temp_warn
+			[ temperature, temp_warn ] if temperature && temperature >= temp_warn
 
 		info[ :warning ] = warnings.join( "\n" ) unless warnings.empty?
 		self.results[ host ] = info
