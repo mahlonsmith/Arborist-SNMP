@@ -2,11 +2,12 @@
 Arborist-SNMP
 =============
 
-home
-: http://bitbucket.org/mahlon/Arborist-SNMP
-
 code
 : http://code.martini.nu/Arborist-SNMP
+
+mirrors
+: https://github.com/mahlonsmith/Arborist-SNMP
+: https://hg.sr.ht/~mahlon/Arborist-SNMP
 
 
 Description
