@@ -33,7 +33,7 @@ per resource node.  Both Windows and UCD-SNMP systems are supported.
 Prerequisites
 -------------
 
-  * Ruby 2.3 or better
+  * Ruby 2.4 or better
 
 
 Installation
@@ -274,7 +274,7 @@ end
 
 ## License
 
-Copyright (c) 2016-2019 Michael Granger and Mahlon E. Smith
+Copyright (c) 2016-2020 Michael Granger and Mahlon E. Smith
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without

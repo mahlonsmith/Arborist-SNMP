@@ -104,7 +104,7 @@ class Arborist::Monitor::SNMP::UPS::Battery
 	def check_battery( host, snmp )
 		info = self.format_battery( snmp )
 
-		config    = identifiers[ host ].last || {}
+		config    = self.identifiers[ host ].last['config'] || {}
 		cap_warn  = config[ 'capacity_warn_at' ] || self.class.capacity_warn_at
 		temp_warn = config[ 'temperature_warn_at' ] || self.class.temperature_warn_at
 

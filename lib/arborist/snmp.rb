@@ -14,7 +14,7 @@ module Arborist::SNMP
 
 
 	# Package version
-	VERSION = '0.6.1'
+	VERSION = '0.6.2'
 
 	# Version control revision
 	REVISION = %q$Revision$

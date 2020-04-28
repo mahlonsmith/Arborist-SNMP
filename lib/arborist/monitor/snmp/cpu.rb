@@ -117,7 +117,7 @@ class Arborist::Monitor::SNMP::CPU
 	def find_load( host, snmp )
 		info = self.format_load( snmp )
 
-		config  = identifiers[ host ].last || {}
+		config  = self.identifiers[ host ].last['config'] || {}
 		warn_at = config[ 'warn_at' ] || self.class.warn_at
 		usage   = info.dig( :cpu, :usage ) || 0
 

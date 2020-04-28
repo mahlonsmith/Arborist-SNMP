@@ -57,7 +57,7 @@ module Arborist::Monitor::SNMP
 		nodes.each_pair do |(identifier, props)|
 			next unless props.key?( 'addresses' )
 			address = props[ 'addresses' ].first
-			self.identifiers[ address ] = [ identifier, props['config'] ]
+			self.identifiers[ address ] = [ identifier, props ]
 		end
 
 		# Perform the work!

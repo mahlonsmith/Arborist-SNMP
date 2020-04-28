@@ -71,7 +71,7 @@ class Arborist::Monitor::SNMP::Process
 	#### +snmp+ connection.
 	###
 	def gather_processlist( host, snmp )
-		config = self.identifiers[ host ].last || {}
+		config = self.identifiers[ host ].last['config'] || {}
 		errors = []
 		procs  = self.system =~ /windows\s+/i ? self.get_windows( snmp ) : self.get_procs( snmp )
 

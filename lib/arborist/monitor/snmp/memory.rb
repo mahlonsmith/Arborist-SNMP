@@ -84,7 +84,7 @@ class Arborist::Monitor::SNMP::Memory
 	def gather_memory( host, snmp )
 		info = self.system =~ /windows\s+/i ? self.get_windows( snmp ) : self.get_mem( snmp )
 
-		config           = identifiers[ host ].last || {}
+		config           = self.identifiers[ host ].last['config'] || {}
 		physical_warn_at = config[ 'physical_warn_at' ] || self.class.physical_warn_at
 		swap_warn_at     = config[ 'swap_warn_at' ] || self.class.swap_warn_at
 

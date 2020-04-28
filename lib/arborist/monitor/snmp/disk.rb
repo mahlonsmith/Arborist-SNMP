@@ -70,7 +70,9 @@ class Arborist::Monitor::SNMP::Disk
 	### Return the properties used by this monitor.
 	###
 	def self::node_properties
-		return USED_PROPERTIES
+		used_properties = USED_PROPERTIES.dup
+		used_properties << :mounts
+		return used_properties
 	end
 
 
@@ -98,22 +100,23 @@ class Arborist::Monitor::SNMP::Disk
 	### +snmp+ connection.
 	###
 	def gather_disks( host, snmp )
-		mounts  =  self.system =~ /windows\s+/i ? self.windows_disks( snmp ) : self.unix_disks( snmp )
-		config  = self.identifiers[ host ].last || {}
-		warn_at = config[ 'warn_at' ] || self.class.warn_at
+		current_mounts = self.system =~ /windows\s+/i ? self.windows_disks( snmp ) : self.unix_disks( snmp )
+		config         = self.identifiers[ host ].last['config'] || {}
+		warn_at        = config[ 'warn_at' ] || self.class.warn_at
+
+		self.log.warn self.identifiers[ host ]
 
 		includes = self.format_mounts( config, 'include' ) || self.class.include
 		excludes = self.format_mounts( config, 'exclude' ) || self.class.exclude
 
-		mounts.reject! do |path, percentage|
+		current_mounts.reject! do |path, percentage|
 			path = path.to_s
 			excludes.match( path ) || ( includes && ! includes.match( path ) )
 		end
 
 		errors   = []
 		warnings = []
-		mounts.each_pair do |path, percentage|
-
+		current_mounts.each_pair do |path, percentage|
 			warn = if warn_at.is_a?( Hash )
 				warn_at[ path ] || WARN_AT
 			else
@@ -130,6 +133,13 @@ class Arborist::Monitor::SNMP::Disk
 				end
 			end
 		end
+
+		# Remove any past mounts that configuration exclusions should
+		# now omit.
+		mounts = self.identifiers[ host ].last[ 'mounts' ] || {}
+		mounts.keys.each{|k| mounts[k] = nil }
+
+		mounts.merge!( current_mounts )
 
 		self.results[ host ] = { mounts: mounts }
 		self.results[ host ][ :error ]   = errors.join(', ')   unless errors.empty?
