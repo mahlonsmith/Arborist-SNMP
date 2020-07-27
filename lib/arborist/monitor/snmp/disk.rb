@@ -19,7 +19,8 @@ class Arborist::Monitor::SNMP::Disk
 	STORAGE_NET_SNMP = {
 		path: '1.3.6.1.4.1.2021.9.1.2',
 		percent: '1.3.6.1.4.1.2021.9.1.9',
-		type: '1.3.6.1.2.1.25.3.8.1.4'
+		type: '1.3.6.1.2.1.25.3.8.1.4',
+		access: '1.3.6.1.2.1.25.3.8.1.5'
 	}
 
 	# The OID that matches a local windows hard disk.
@@ -41,6 +42,9 @@ class Arborist::Monitor::SNMP::Disk
 	# The fallback warning capacity.
 	WARN_AT = 90
 
+	# Access mode meanings
+	ACCESS_READWRITE = 1
+	ACCESS_READONLY  = 2
 
 	# Configurability API
 	#
@@ -61,6 +65,12 @@ class Arborist::Monitor::SNMP::Disk
 		#
 		setting :exclude,
 			default: [ '^/dev(/.+)?$', '/dev$', '^/net(/.+)?$', '/proc$', '^/run$', '^/sys/', '/sys$' ] do |val|
+			mounts = Array( val ).map{|m| Regexp.new(m) }
+			Regexp.union( mounts )
+		end
+
+		# Paths to alert for read-only status
+		setting :readonly_include, default: [ '^/$' ] do |val|
 			mounts = Array( val ).map{|m| Regexp.new(m) }
 			Regexp.union( mounts )
 		end
@@ -104,33 +114,37 @@ class Arborist::Monitor::SNMP::Disk
 		config         = self.identifiers[ host ].last['config'] || {}
 		warn_at        = config[ 'warn_at' ] || self.class.warn_at
 
-		self.log.warn self.identifiers[ host ]
+		self.log.debug self.identifiers[ host ]
 
 		includes = self.format_mounts( config, 'include' ) || self.class.include
 		excludes = self.format_mounts( config, 'exclude' ) || self.class.exclude
 
-		current_mounts.reject! do |path, percentage|
+		current_mounts.reject! do |path, data|
 			path = path.to_s
 			excludes.match( path ) || ( includes && ! includes.match( path ) )
 		end
 
 		errors   = []
 		warnings = []
-		current_mounts.each_pair do |path, percentage|
+		current_mounts.each_pair do |path, data|
 			warn = if warn_at.is_a?( Hash )
 				warn_at[ path ] || WARN_AT
 			else
 				warn_at
 			end
 
-			self.log.debug "%s:%s -> at %d, warn at %d" % [ host, path, percentage, warn ]
+			self.log.debug "%s:%s -> %p, warn at %d" % [ host, path, data, warn ]
 
-			if percentage >= warn.to_i
-				if percentage >= 100
-					errors << "%s at %d%% capacity" % [ path, percentage ]
+			if data[ :capacity ] >= warn.to_i
+				if data[ :capacity ] >= 100
+					errors << "%s at %d%% capacity" % [ path, data[ :capacity ] ]
 				else
-					warnings << "%s at %d%% capacity" % [ path, percentage ]
+					warnings << "%s at %d%% capacity" % [ path, data[ :capacity ] ]
 				end
+			end
+
+			if self.class.readonly_include.match( path ) && data[ :accessmode ] == ACCESS_READONLY
+				errors << "%s is mounted read-only." % [ path ]
 			end
 		end
 
@@ -185,7 +199,7 @@ class Arborist::Monitor::SNMP::Disk
 			next if totals[ idx ].zero?
 			next unless types[ idx ]
 			disks[ path ] ||= {}
-			disks[ path ] = (( used[idx].to_f / totals[idx] ) * 100).round( 1 )
+			disks[ path ][ :capacity ] = (( used[idx].to_f / totals[idx] ) * 100).round( 1 )
 		end
 
 		return disks
@@ -195,16 +209,21 @@ class Arborist::Monitor::SNMP::Disk
 	### Fetch information for Unix/MacOS systems.
 	###
 	def unix_disks( snmp )
-		oids = [ STORAGE_NET_SNMP[:path], STORAGE_NET_SNMP[:percent] ]
-		paths = snmp.walk( oid: oids.first ).each_with_object( [] ) do |(_, value), acc|
+		oids = [ STORAGE_NET_SNMP[:path], STORAGE_NET_SNMP[:percent], STORAGE_NET_SNMP[:access] ]
+		paths = snmp.walk( oid: STORAGE_NET_SNMP[:path] ).each_with_object( [] ) do |(_, value), acc|
 			acc << value
 		end
-		capacities = snmp.walk( oid: oids.last ).each_with_object( [] ) do |(_, value), acc|
+		capacities = snmp.walk( oid: STORAGE_NET_SNMP[:percent] ).each_with_object( [] ) do |(_, value), acc|
+			acc << value
+		end
+		accessmodes = snmp.walk( oid: STORAGE_NET_SNMP[:access] ).each_with_object( [] ) do |(_, value), acc|
 			acc << value
 		end
 
-		pairs = paths.zip( capacities )
-		return Hash[ *pairs.flatten ]
+		pairs = paths.each_with_object( {} ).with_index do |(p, acc), idx|
+			acc[p] = { capacity: capacities[idx], accessmode: accessmodes[idx] }
+		end
+		return pairs
 	end
 
 end # class Arborist::Monitor::SNMP::Disk
