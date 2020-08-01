@@ -17,10 +17,10 @@ class Arborist::Monitor::SNMP::Disk
 	# OIDS required to pull disk information from net-snmp.
 	#
 	STORAGE_NET_SNMP = {
-		path: '1.3.6.1.4.1.2021.9.1.2',
+		path:    '1.3.6.1.4.1.2021.9.1.2',
 		percent: '1.3.6.1.4.1.2021.9.1.9',
-		type: '1.3.6.1.2.1.25.3.8.1.4',
-		access: '1.3.6.1.2.1.25.3.8.1.5'
+		type:    '1.3.6.1.2.1.25.3.8.1.4',
+		access:  '1.3.6.1.2.1.25.3.8.1.5'
 	}
 
 	# The OID that matches a local windows hard disk.
@@ -33,14 +33,17 @@ class Arborist::Monitor::SNMP::Disk
 	# OIDS required to pull disk information from Windows.
 	#
 	STORAGE_WINDOWS = {
-		type: '1.3.6.1.2.1.25.2.3.1.2',
-		path: '1.3.6.1.2.1.25.2.3.1.3',
+		type:  '1.3.6.1.2.1.25.2.3.1.2',
+		path:  '1.3.6.1.2.1.25.2.3.1.3',
 		total: '1.3.6.1.2.1.25.2.3.1.5',
-		used: '1.3.6.1.2.1.25.2.3.1.6'
+		used:  '1.3.6.1.2.1.25.2.3.1.6'
 	}
 
 	# The fallback warning capacity.
 	WARN_AT = 90
+
+	# Don't alert if a mount is readonly by default.
+	ALERT_READONLY = false
 
 	# Access mode meanings
 	ACCESS_READWRITE = 1
@@ -51,6 +54,9 @@ class Arborist::Monitor::SNMP::Disk
 	configurability( 'arborist.snmp.disk' ) do
 		# What percentage qualifies as a warning
 		setting :warn_at, default: WARN_AT
+
+		# Set down if the mounts are readonly?
+		setting :alert_readonly, default: ALERT_READONLY
 
 		# If non-empty, only these paths are included in checks.
 		#
@@ -65,12 +71,6 @@ class Arborist::Monitor::SNMP::Disk
 		#
 		setting :exclude,
 			default: [ '^/dev(/.+)?$', '/dev$', '^/net(/.+)?$', '/proc$', '^/run$', '^/sys/', '/sys$' ] do |val|
-			mounts = Array( val ).map{|m| Regexp.new(m) }
-			Regexp.union( mounts )
-		end
-
-		# Paths to alert for read-only status
-		setting :readonly_include, default: [ '^/$' ] do |val|
 			mounts = Array( val ).map{|m| Regexp.new(m) }
 			Regexp.union( mounts )
 		end
@@ -113,6 +113,7 @@ class Arborist::Monitor::SNMP::Disk
 		current_mounts = self.system =~ /windows\s+/i ? self.windows_disks( snmp ) : self.unix_disks( snmp )
 		config         = self.identifiers[ host ].last['config'] || {}
 		warn_at        = config[ 'warn_at' ] || self.class.warn_at
+		alert_readonly = config[ 'alert_readonly' ] || self.class.alert_readonly
 
 		self.log.debug self.identifiers[ host ]
 
@@ -128,10 +129,12 @@ class Arborist::Monitor::SNMP::Disk
 		warnings = []
 		current_mounts.each_pair do |path, data|
 			warn = if warn_at.is_a?( Hash )
-				warn_at[ path ] || WARN_AT
+				warn_at[ path ] || self.class.warn_at
 			else
 				warn_at
 			end
+
+			readonly = alert_readonly.is_a?( Hash ) ? alert_readonly[ path ] : alert_readonly
 
 			self.log.debug "%s:%s -> %p, warn at %d" % [ host, path, data, warn ]
 
@@ -143,7 +146,7 @@ class Arborist::Monitor::SNMP::Disk
 				end
 			end
 
-			if self.class.readonly_include.match( path ) && data[ :accessmode ] == ACCESS_READONLY
+			if readonly && data[ :accessmode ] == ACCESS_READONLY
 				errors << "%s is mounted read-only." % [ path ]
 			end
 		end
@@ -174,23 +177,16 @@ class Arborist::Monitor::SNMP::Disk
 	### Fetch information for Windows systems.
 	###
 	def windows_disks( snmp )
-		oids = [
-			STORAGE_WINDOWS[:path],
-			STORAGE_WINDOWS[:type],
-			STORAGE_WINDOWS[:total],
-			STORAGE_WINDOWS[:used]
-		]
-
-		paths = snmp.walk( oid: oids[0] ).each_with_object( [] ) do |(_, value), acc|
+		paths = snmp.walk( oid: STORAGE_WINDOWS[:path] ).each_with_object( [] ) do |(_, value), acc|
 			acc << value
 		end
-		types = snmp.walk( oid: oids[1] ).each_with_object( [] ) do |(_, value), acc|
+		types = snmp.walk( oid: STORAGE_WINDOWS[:type] ).each_with_object( [] ) do |(_, value), acc|
 			acc << WINDOWS_DEVICES.include?( value )
 		end
-		totals = snmp.walk( oid: oids[2] ).each_with_object( [] ) do |(_, value), acc|
+		totals = snmp.walk( oid: STORAGE_WINDOWS[:total] ).each_with_object( [] ) do |(_, value), acc|
 			acc << value
 		end
-		used = snmp.walk( oid: oids[3] ).each_with_object( [] ) do |(_, value), acc|
+		used = snmp.walk( oid: STORAGE_WINDOWS[:used] ).each_with_object( [] ) do |(_, value), acc|
 			acc << value
 		end
 
@@ -209,7 +205,6 @@ class Arborist::Monitor::SNMP::Disk
 	### Fetch information for Unix/MacOS systems.
 	###
 	def unix_disks( snmp )
-		oids = [ STORAGE_NET_SNMP[:path], STORAGE_NET_SNMP[:percent], STORAGE_NET_SNMP[:access] ]
 		paths = snmp.walk( oid: STORAGE_NET_SNMP[:path] ).each_with_object( [] ) do |(_, value), acc|
 			acc << value
 		end

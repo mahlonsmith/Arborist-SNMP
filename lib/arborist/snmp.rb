@@ -1,5 +1,6 @@
 # -*- ruby -*-
 #encoding: utf-8
+# vim: set noet nosta sw=4 ts=4 :
 
 require 'loggability'
 require 'arborist'
@@ -14,7 +15,7 @@ module Arborist::SNMP
 
 
 	# Package version
-	VERSION = '0.6.2'
+	VERSION = '0.7.0'
 
 	# Version control revision
 	REVISION = %q$Revision$

@@ -117,6 +117,9 @@ averages of the machine.
                  You can also set this to a Hash, keyed on mount name, if you want differing
                  warning values per mount point.  A mount point that is at 100% capacity will
                  be explicity set to `down`, as the resource it represents has been exhausted.
+  * **alert_readonly**: Set the now to an `error` state if mounts are readonly.
+                 This may be helpful in iscsi-root environments.  You can set this to a Hash,
+                 keyed on mount name, if you want differing behavior per mount point.
   * **include**: String or Array of Strings.  If present, only matching mount points are
                  considered while performing checks.  These are treated as regular expressions.
   * **exclude**: String or Array of Strings.  If present, matching mount point are removed
@@ -232,6 +235,7 @@ pragma, per node.  Here's a more elaborate example that performs the following:
   * Only monitor specific disk partitions, warning at different capacities .
   * Ensure the 'important' processing is running with the '--production' flag.
   * Warns at 95% memory utilization OR 10% swap.
+  * Ensure '/' is not a mounted as a read-only filesystem.
 
 -
 
@@ -259,8 +263,11 @@ Arborist::Host 'example' do
 				'^/var'
 			],
 			warn_at: {
-					'/tmp' => 50,
-					'/var' => 80
+				'/tmp' => 50,
+				'/var' => 80
+			},
+			alert_readonly: {
+				'/' => true
 			}
 	end
 
